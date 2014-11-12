@@ -5,6 +5,9 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Distributed cache service
@@ -12,16 +15,35 @@ import com.google.common.hash.Hashing;
  */
 public class DistributedCacheService implements CacheServiceInterface {
     private final String cacheServerUrl;
-    HashFunction hashFunction = Hashing.md5();
+    //HashFunction hashFunction = Hashing.md5();
+    List<Long> servers;//Lists.newArrayList("0", "1",);
+    ConsistentHash<Long> consistentHash;
     public DistributedCacheService(String serverUrl) {
         this.cacheServerUrl = serverUrl;
+        this.servers = Arrays.asList(0L, 1L , 2L);
+        HashFunction hf = Hashing.md5();
+
+        this.consistentHash = new ConsistentHash<Long>(hf, 1000, this.servers); 
+
     }
 
     private long getServerId(long key) 
     {
-    	return hashFunction.hashString(Long.toString(key)).asLong() % 3;
+    	//int serverid = consistentHash(Hashing.md5().hashString(Long.toString(key)),10000, servers.size());
+    	/*long hash = hashFunction.hashString(Long.toString(key)).asLong() % 3;
+    	System.out.println(hashFunction.hashString(Long.toString(key)).asLong());
+    	System.out.println(hashFunction.hashString(Long.toString(key)).asLong() % 3);
+    	if(hash < 0)
+    	{
+    		return hash + 3;
+    	}
+    	else
+    	{
+    		return hash ;
+    	}*/
     	//int serverID = Hashing.consistentHash(hashFunction(key.toString()));
     	//return Integer.parseInt(serverID);
+    	return this.consistentHash.get(Long.toString(key));
     }
     /**
      * @see edu.sjsu.cmpe.cache.client.CacheServiceInterface#get(long)
