@@ -3,6 +3,8 @@ import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.exceptions.UnirestException;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 
 /**
  * Distributed cache service
@@ -10,12 +12,17 @@ import com.mashape.unirest.http.exceptions.UnirestException;
  */
 public class DistributedCacheService implements CacheServiceInterface {
     private final String cacheServerUrl;
-    
+    HashFunction hashFunction = Hashing.md5();
     public DistributedCacheService(String serverUrl) {
         this.cacheServerUrl = serverUrl;
     }
 
-    private long getServerId(long key) {return 1;}
+    private long getServerId(long key) 
+    {
+    	return hashFunction.hashString(Long.toString(key)).asLong() % 3;
+    	//int serverID = Hashing.consistentHash(hashFunction(key.toString()));
+    	//return Integer.parseInt(serverID);
+    }
     /**
      * @see edu.sjsu.cmpe.cache.client.CacheServiceInterface#get(long)
      */
