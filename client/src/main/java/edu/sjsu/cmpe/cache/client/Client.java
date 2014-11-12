@@ -5,7 +5,7 @@ public class Client {
     public static void main(String[] args) throws Exception {
         System.out.println("Starting Cache Client...");
         CacheServiceInterface cache = new DistributedCacheService(
-                "http://localhost:3000");
+                "http://localhost:300");
 
         cache.put(1, "foo");
         System.out.println("put(1 => foo)");
