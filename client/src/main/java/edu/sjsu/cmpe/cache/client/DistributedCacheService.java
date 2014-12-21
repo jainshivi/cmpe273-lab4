@@ -12,6 +12,8 @@ import java.util.concurrent.ExecutionException;
 import java.lang.InterruptedException;
 import java.util.concurrent.TimeoutException;
 
+import java.io.EOFException;
+import java.lang.RuntimeException;
 
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
@@ -38,25 +40,109 @@ public class DistributedCacheService implements CacheServiceInterface {
     @Override
     public String get(long key) {
         HttpResponse<JsonNode> response = null;
+        List<Future<HttpResponse<JsonNode>>> futures = new ArrayList<Future<HttpResponse<JsonNode>>>(3);
 
-        long serverID = 0;
-        try {
-            response = Unirest.get(this.cacheServerUrl + Long.toString(serverID) + "/cache/{key}")
-                              .header("accept", "application/json")
-                              .routeParam("key", Long.toString(key)).asJson();
-        } catch (UnirestException e) {
-            System.err.println(e);
+        for (long serverID = 0; serverID < 3; serverID++) {
+            String url = this.cacheServerUrl + Long.toString(serverID) + "/cache/{key}";
+
+            futures.add(
+                Unirest.get(url)
+                .header("accept", "application/json")
+                .routeParam("key", Long.toString(key))
+                .asJsonAsync());
         }
 
-        if (response != null) {
-            if (response.getBody() != null) {
-                if (response.getBody().getObject() != null) {
-                    return response.getBody().getObject().getString("value");
+        int doneCount = 0;
+        String val1 = "";
+        String val2 = "";
+
+        int count1 = 0;
+        int count2 = 0;
+        String val = "";
+        int flag = 0;
+
+        List<String> futuresVal = new ArrayList<String>(3);
+
+        for (int i = 0; i < 3; i++) {
+            futuresVal.add("");
+        }
+
+        while (true) {
+            doneCount = 0;
+
+            for (int i = 0; i < 3; i++) {
+                Future<HttpResponse<JsonNode>> f = futures.get(i);
+
+                if (f.isDone()) {
+                    doneCount++;
+
+                    try {
+                        response = f.get();
+                        flag = 0;
+                        if (response != null) {
+                            if (response.getBody() != null) {
+                                if (response.getBody().getObject() != null) {
+                                    
+                                    val = response.getBody().getObject().getString("value");
+                                    futuresVal.set(i, val);
+
+                                    if (val1.equals("")) {
+                                        val1 = val;
+                                        count1 = 1;
+                                    } else if (val1.equals(val)) {
+                                        count1++;
+                                    } else {
+                                        val2 = val;
+                                        count2++;
+                                    }
+
+                                    flag = 1;
+                                }
+                            }
+                        }
+
+                        if (flag == 0) {
+                            futuresVal.set(i, "fail");
+                            count2 = 1;
+                            val2 = "fail";
+                        }
+                    } catch (RuntimeException e) {
+
+                    } catch (Exception e) {
+                        futuresVal.set(i, "fail");
+                        count2 = 1;
+                        val2 = "fail";
+                    }
                 }
+            }
+
+            if (doneCount == 3) {
+                break;
             }
         }
 
-        return "Not found";
+        if (count1 != 0 && count1 < count2) {
+            // count 2 is majority.
+            for (int i = 0; i < 3; i++) {
+                if (futuresVal.get(i) == val1) {
+                    this.putOnServer(key, val2, i);
+                }
+            }
+            return val2;
+        } else if (count2 != 0 && count2 < count1) {
+            // count 1 is majority.
+            for (int i = 0; i < 3; i++) {
+                if (futuresVal.get(i) == val2) {
+                    this.putOnServer(key, val1, i);
+                }
+            }
+            return val1;
+        } else if (count1 == 3) {
+            return val1;
+        }
+
+        return val2;
+        
     }
 
     /**
@@ -116,9 +202,10 @@ public class DistributedCacheService implements CacheServiceInterface {
                     }
                 }
                 else {
-                    System.out.println("We are done. Done: " + doneCount + " Fail: " + failCount);
                 }
 
+                futures.clear();
+                futures = null;
                 break;
             }
         }
@@ -132,6 +219,20 @@ public class DistributedCacheService implements CacheServiceInterface {
             response = Unirest.delete(this.cacheServerUrl + Integer.toString(serverID) + "/cache/{key}")
                               .routeParam("key", Long.toString(key))
                               .asJson();
+        } catch (UnirestException e) {
+            System.err.println(e);
+        }
+    }
+
+    public void putOnServer(long key, String value, int serverID) {    
+        String url = this.cacheServerUrl + Long.toString(serverID) + "/cache/{key}/{value}";
+
+        try {
+            Unirest.put(url)
+                   .header("accept", "application/json")
+                   .routeParam("key", Long.toString(key))
+                   .routeParam("value", value)
+                   .asJson();
         } catch (UnirestException e) {
             System.err.println(e);
         }
