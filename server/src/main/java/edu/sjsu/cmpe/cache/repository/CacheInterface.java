@@ -37,4 +37,11 @@ public interface CacheInterface {
      */
     List<Entry> getAll();
 
+
+    /**
+     * Delete an entry
+     * @param aLong
+     * @return
+     */
+    boolean delete(Long aLong);
 }
